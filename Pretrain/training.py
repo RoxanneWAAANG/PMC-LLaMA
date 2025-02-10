@@ -36,6 +36,7 @@ def safe_save_model_for_hf_trainer(trainer: transformers.Trainer, output_dir: st
 @dataclass
 class ModelArguments:
     model_path: Optional[str] = field(default="./LLAMA_Model/llama-13b-hf")
+    # Supports potential LoRA (Low-Rank Adaptation) through configuration.
     is_lora: Optional[bool] = field(default=False)
     peft_mode: Optional[str] = field(default="lora")
     lora_rank: Optional[int] = field(default=8)
@@ -54,29 +55,37 @@ class TrainingArguments(transformers.TrainingArguments):
 
     
 def main():
+    # Initializes argument parser with the three configuration classes
     parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
+    # Parses command-line arguments into dataclass instances
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     
     print("Setup Data")
+    # Uses custom dataset handling through PaperDataset.
     #Train_elems, Eval_elems = read_jsonl(data_args.Dataset_path + '/name_list.csv',eval_num = 10000)
     Train_dataset = PaperDataset(data_args.Dataset_path, '/Train.csv')
     Eval_dataset = PaperDataset(data_args.Dataset_path, '/Eval.csv')
     
     
     print("Setup Model")
+    # Loads pre-trained LLaMA model from specified path.
+    # cache_dir: supports caching to avoid repeated downloads
     model = transformers.LlamaForCausalLM.from_pretrained(
         model_args.model_path,
         cache_dir=training_args.cache_dir,
     )
     
+    # Creates Hugging Face Trainer instance.
     trainer = Trainer(model=model, 
                       train_dataset = Train_dataset, 
                       eval_dataset = Eval_dataset,
                       args=training_args,
                       )
+    # Combines model, data, and training configurations
     #trainer.train(resume_from_checkpoint=True)
     trainer.train()
     trainer.save_state()
+    # Saves training state and final model
     safe_save_model_for_hf_trainer(trainer=trainer, output_dir=training_args.output_dir)
       
 

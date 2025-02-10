@@ -14,6 +14,8 @@ import utils
 from torch.utils.data import Dataset
 from transformers import Trainer
 
+# Defines special tokens and prompt templates.
+# IGNORE_INDEX: masking input portions in loss calculation.
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
 DEFAULT_EOS_TOKEN = "</s>"
@@ -35,6 +37,7 @@ PROMPT_DICT = {
 }
 
 
+# Configuration classes using Hugging Face's dataclass pattern.
 @dataclass
 class ModelArguments:
     model_name_or_path: Optional[str] = field(default="facebook/opt-125m")
@@ -126,37 +129,57 @@ class SupervisedDataset(Dataset):
         list_data_dict = utils.jload(data_path)
 
         logging.warning("Formatting inputs...")
+        # Retrieves two formatting templates from PROMPT_DICT.
         prompt_input, prompt_no_input = PROMPT_DICT["prompt_input"], PROMPT_DICT["prompt_no_input"]
+        # Creates a list of formatted prompt strings.
         sources = [
+            # If example["input"] is not empty, prompt_input is used.
+            # If example["input"] is empty, prompt_no_input is used.
+            # The .format_map(example) method substitutes values from example into the prompt
             prompt_input.format_map(example) if example.get("input", "") != "" else prompt_no_input.format_map(example)
             for example in list_data_dict
         ]
+        # Creates the target outputs, ensuring that each ends with the model’s End-of-Sequence.
         targets = [f"{example['output']}{tokenizer.eos_token}" for example in list_data_dict]
 
         logging.warning("Tokenizing inputs... This may take some time...")
+        # Calls the preprocess function (likely defined elsewhere),
+        # which tokenizes the inputs and targets.
         data_dict = preprocess(sources, targets, tokenizer)
 
+        # Stores the tokenized input sequences (input_ids)
+        # and corresponding labels (labels) for training.
         self.input_ids = data_dict["input_ids"]
         self.labels = data_dict["labels"]
 
     def __len__(self):
         return len(self.input_ids)
 
+    # Returns the tokenized input and label for the given index i.
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
         return dict(input_ids=self.input_ids[i], labels=self.labels[i])
 
 
+# a collator function used to batch multiple examples
+# together by padding them to the same length.
 @dataclass
 class DataCollatorForSupervisedDataset(object):
     """Collate examples for supervised fine-tuning."""
 
+    # Declares that tokenizer is an instance of transformers.PreTrainedTokenizer.
     tokenizer: transformers.PreTrainedTokenizer
 
+    # Takes a sequence of instances (instances),
+    # each being a dictionary with input_ids and labels.
     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
+        # Extracts input_ids and labels from the instances.
         input_ids, labels = tuple([instance[key] for instance in instances] for key in ("input_ids", "labels"))
+        # Pads input_ids to ensure they have the same length across all samples in the batch.
+        # Uses tokenizer.pad_token_id as the padding value.
         input_ids = torch.nn.utils.rnn.pad_sequence(
             input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id
         )
+        # Pads labels to the same length using IGNORE_INDEX (likely defined elsewhere).
         labels = torch.nn.utils.rnn.pad_sequence(labels, batch_first=True, padding_value=IGNORE_INDEX)
         return dict(
             input_ids=input_ids,
