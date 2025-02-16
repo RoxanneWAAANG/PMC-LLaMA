@@ -1,11 +1,26 @@
 import transformers
 import torch
-# import bitsandbytes as bnb
-# from transformers import LlamaForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-tokenizer = transformers.LlamaTokenizer.from_pretrained('chaoyi-wu/PMC_LLAMA_7B')
-model = transformers.LlamaForCausalLM.from_pretrained('chaoyi-wu/PMC_LLAMA_7B')
+# Clear GPU cache
+torch.cuda.empty_cache()
+
+# Define the local directory where the model is saved
+save_directory = "/home/jack/Projects/yixin-llm/yixin-llm-data/PMC-LLaMA/models--axiong--PMC_LLaMA_13B/snapshots/265afcdeef43b86052a2048a862d1a493cc7dffb"
+
+# Load the tokenizer and model from the local directory
+tokenizer = transformers.LlamaTokenizer.from_pretrained(save_directory)
+model = transformers.LlamaForCausalLM.from_pretrained(save_directory, torch_dtype=torch.float16)
+# tokenizer = transformers.LlamaTokenizer.from_pretrained('axiong/PMC_LLaMA_13B')
+# model = transformers.LlamaForCausalLM.from_pretrained('axiong/PMC_LLaMA_13B')
+
 model.cuda()  # move the model to GPU
+
+# Enable gradient checkpointing
+model.gradient_checkpointing_enable()
+
+# Set pad_token_id explicitly
+model.generation_config.pad_token_id = tokenizer.eos_token_id
+
 
 prompt_input = (
     'Below is an instruction that describes a task, paired with an input that provides further context.'
@@ -27,20 +42,24 @@ example = {
 }
 input_str = [prompt_input.format_map(example)]
 
+# Tokenize input
 model_inputs = tokenizer(
-            input_str,
-            return_tensors="pt",
-            padding=True,
-            add_special_tokens=False
-        )
-print( f"\033[32mmodel_inputs\033[0m: { model_inputs }" )
+    input_str,
+    return_tensors='pt',
+    padding=True,
+).to("cuda")  # Move inputs to GPU
+# print( f"\033[32mmodel_inputs\033[0m: { model_inputs }" )
 
+# Generate output
 with torch.no_grad():
-    generated = model.generate(
-        inputs = model_inputs["input_ids"],
-        # max_length=50,
-        max_new_tokens=200,
+    topk_output = model.generate(
+        model_inputs.input_ids,
+        max_new_tokens=1000,
+        top_k=50,
         do_sample=True,
-        top_k=50
+        temperature=0.7
     )
-    print('model predict: ',tokenizer.decode(generated[0]))
+
+output_str = tokenizer.batch_decode(topk_output)
+# output_str = tokenizer.batch_decode(topk_output, skip_special_tokens=True)
+print('model predict: ', output_str[0])
