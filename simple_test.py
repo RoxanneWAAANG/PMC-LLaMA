@@ -13,7 +13,7 @@ model = transformers.LlamaForCausalLM.from_pretrained(save_directory, torch_dtyp
 # tokenizer = transformers.LlamaTokenizer.from_pretrained('axiong/PMC_LLaMA_13B')
 # model = transformers.LlamaForCausalLM.from_pretrained('axiong/PMC_LLaMA_13B')
 
-model.cuda()  # move the model to GPU
+# model.cuda()  # move the model to GPU
 
 # Enable gradient checkpointing
 model.gradient_checkpointing_enable()
@@ -25,7 +25,7 @@ model.generation_config.pad_token_id = tokenizer.eos_token_id
 prompt_input = (
     'Below is an instruction that describes a task, paired with an input that provides further context.'
     'Write a response that appropriately completes the request.\n\n'
-    '### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:'
+    '### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:\n{response}'
 )
 
 # Define Few-Shot In-Context Examples
@@ -76,7 +76,8 @@ current_example = {
         "Physical exam is notable for an absence of costovertebral angle tenderness and a gravid uterus. "
         "Which of the following is the best treatment for this patient?"
         "###Options: A. Ampicillin B. Ceftriaxone C. Doxycycline D. Nitrofurantoin"
-    )
+    ),
+    "response": ""  # Leave this empty for the model to generate
 }
 
 # Combine Few-Shot Examples with the Current Example
@@ -103,7 +104,7 @@ model_inputs = tokenizer(
     input_str,
     return_tensors='pt',
     padding=True,
-).to("cuda")  # Move inputs to GPU
+)#.to("cuda")  # Move inputs to GPU
 # print( f"\033[32mmodel_inputs\033[0m: { model_inputs }" )
 
 # Generate output
